@@ -23,11 +23,7 @@ path_url=$(ynh_app_setting_get --app=$app --key=path)
 is_public=$(ynh_app_setting_get --app=$app --key=is_public)
 final_path=$(ynh_app_setting_get --app=$app --key=final_path)
 
-db_name=$(ynh_app_setting_get --app=$app --key=db_name)
-db_pwd=$(ynh_app_setting_get --app=$app --key=db_pwd)
 port=$(ynh_app_setting_get --app=$app --key=port)
-ldap_user=$(ynh_app_setting_get --app=$app --key=ldap_user)
-ldap_password=$(ynh_app_setting_get --app=$app --key=ldap_password)
 
 #=================================================
 # CHECK VERSION
@@ -50,25 +46,10 @@ elif [ "$is_public" = "No" ]; then
 	is_public=0
 fi
 
-# If db_name doesn't exist, create it
-if [ -z "$db_name" ]; then
-	db_name=$(ynh_sanitize_dbid --db_name=$app)
-	ynh_app_setting_set --app=$app --key=db_name --value=$db_name
-fi
-
 # If final_path doesn't exist, create it
 if [ -z "$final_path" ]; then
 	final_path=/var/www/$app
 	ynh_app_setting_set --app=$app --key=final_path --value=$final_path
-fi
-
-# If ldap_user doesn't exist, retrieve it or create it
-if [[ -z "$ldap_user" ]]; then
-	ldap_user="svc_${app}_ldap"
-	ldap_password=$(ynh_string_random --length=8)
-	ynh_app_setting_set "$app" ldap_user "$ldap_user"
-	ynh_app_setting_set "$app" ldap_password "$ldap_password"
-	yunohost user create $ldap_user --firstname "SvcWikijsLdap" --lastname "SvcWikijsLdap" --mail ${ldap_user}@$domain --password $ldap_password -q 0
 fi
 
 # Remove yarn repository
@@ -76,13 +57,6 @@ ynh_secure_remove --file="/etc/apt/sources.list.d/yarn.list"
 
 # Remove old log file
 ynh_secure_remove --file="/var/log/$app/"
-
-# Create PostgreSQL User
-ynh_psql_create_user $db_name $db_pwd
-
-# Install pg_trgm extension to provide a PostgreSQL search solution
-ynh_psql_test_if_first_run
-ynh_psql_execute_as_root --sql="CREATE EXTENSION IF NOT EXISTS pg_trgm;" --database=$db_name
 
 #=================================================
 # BACKUP BEFORE UPGRADE THEN ACTIVE TRAP
@@ -93,7 +67,7 @@ ynh_print_info --message="Backing up the app before upgrading (may take a while)
 ynh_backup_before_upgrade
 
 #Workaround to be remove in next version
-ynh_systemd_action --service_name=$app --action="start" --log_path=systemd --line_match="HTTP Server:"
+ynh_systemd_action --service_name=$app --action="start" --log_path=systemd --line_match="Server running at"
 
 ynh_clean_setup () {
 	# restore it if the upgrade fails
@@ -110,7 +84,7 @@ ynh_abort_if_errors
 #=================================================
 ynh_print_info --message="Stopping a systemd service..."
 
-ynh_systemd_action --service_name=$app --action="stop" --log_path=systemd --line_match="Stopped wikijs service"
+ynh_systemd_action --service_name=$app --action="stop" --log_path=systemd --line_match="Stopped"
 
 #=================================================
 # DOWNLOAD, CHECK AND UNPACK SOURCE
@@ -120,7 +94,6 @@ if [ "$upgrade_type" == "UPGRADE_APP" ]
 then
 	ynh_print_info --message="Upgrading source files..."
 
-	config_file="$final_path/config.yml"
 	tmpdir="$(mktemp -d)"
 
 	rsync -a "$config_file" "$tmpdir/."
@@ -129,7 +102,6 @@ then
 	# Download, check integrity, uncompress and patch the source from app.src
 	ynh_setup_source --dest_dir="$final_path"
 
-	rsync -a "$tmpdir/config.yml" "$final_path/."
 fi
 
 #=================================================
@@ -145,9 +117,9 @@ ynh_add_nginx_config
 #=================================================
 ynh_print_info --message="Upgrading dependencies..."
 
-ynh_install_nodejs --nodejs_version="10"
+ynh_install_nodejs --nodejs_version="13"
 
-ynh_install_app_dependencies $pkg_dependencies
+# ynh_install_app_dependencies $pkg_dependencies
 
 #=================================================
 # CREATE DEDICATED USER
@@ -163,13 +135,7 @@ ynh_system_user_create --username=$app --home_dir="$final_path"
 # MODIFY A CONFIG FILE
 #=================================================
 
-config_file="$final_path/config.yml"
-ynh_backup_if_checksum_is_different --file=$config_file
-cp -f ../conf/config.sample.yml $config_file
-
-ynh_replace_string --match_string="__PORT__" --replace_string="$port" --target_file="$config_file"
-ynh_replace_string --match_string="__DB_PWD__" --replace_string="$db_pwd" --target_file="$config_file"
-ynh_replace_string --match_string="__DB_NAME__" --replace_string="$db_name" --target_file="$config_file"
+ynh_replace_string --match_string="__PORT__" --replace_string="$port" --target_file="../conf/systemd.service"
 
 #=================================================
 # STORE THE CONFIG FILE CHECKSUM
@@ -213,7 +179,7 @@ fi
 #=================================================
 ynh_print_info --message="Starting a systemd service..."
 
-ynh_systemd_action --service_name=$app --action="start" --log_path=systemd --line_match="HTTP Server:"
+ynh_systemd_action --service_name=$app --action="start" --log_path=systemd --line_match="Server running at"
 
 #=================================================
 # RELOAD NGINX
@@ -227,8 +193,6 @@ ynh_systemd_action --service_name=nginx --action=reload
 #=================================================
 ynh_print_info --message="Sending ReadMe to admin..."
 
-ynh_replace_string --match_string="__LDAP_USER__"    --replace_string="$ldap_user"    --target_file="../conf/ldap_message"
-ynh_replace_string --match_string="__LDAP_PASSWORD__"    --replace_string="$ldap_password"    --target_file="../conf/ldap_message"
 ynh_replace_string --match_string="__DOMAIN__"    --replace_string="$domain"    --target_file="../conf/ldap_message"
 ynh_replace_string --match_string="__PATH_URL__"    --replace_string="$path_url"    --target_file="../conf/ldap_message"
 
