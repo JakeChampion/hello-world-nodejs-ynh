@@ -163,7 +163,7 @@ yunohost service add $app --description "$app daemon for Node Hello World" --log
 ynh_print_info --message="Starting a systemd service..."
 
 # Start a systemd service
-ynh_systemd_action --service_name=$app --action="start" --log_path=systemd --line_match="HTTP Server:"
+ynh_systemd_action --service_name=$app --action="start" --log_path=systemd --line_match="Server running at"
 
 #=================================================
 # SETUP SSOWAT
