@@ -1,0 +1,6 @@
+SOURCE_URL=https://git.jakechampion.name/jakechampion/hello-world-nodejs/archive/v1.0.0.tar.gz
+SOURCE_SUM=21255702ed2f198eae74aa86d2778ec444a3c6bec27d7e7e52229a686b4f1c69
+SOURCE_SUM_PRG=sha256sum
+SOURCE_FORMAT=tar.gz
+SOURCE_IN_SUBDIR=false
+SOURCE_FILENAME=
